@@ -1,18 +1,19 @@
 package com.ironsource.adapters.vungle;
 
+import static com.ironsource.adapters.vungle.Constants.APP_ID;
+import static com.ironsource.adapters.vungle.Constants.PLACEMENT_ID;
 import static com.ironsource.mediationsdk.metadata.MetaData.MetaDataValueTypes.META_DATA_VALUE_BOOLEAN;
 
 import android.app.Activity;
+import android.content.Context;
 import android.text.TextUtils;
-import android.view.Gravity;
-import android.widget.FrameLayout;
+
+import androidx.annotation.NonNull;
 
 import com.ironsource.environment.ContextProvider;
 import com.ironsource.mediationsdk.AbstractAdapter;
-import com.ironsource.mediationsdk.AdapterUtils;
 import com.ironsource.mediationsdk.INetworkInitCallbackListener;
 import com.ironsource.mediationsdk.LoadWhileShowSupportState;
-import com.ironsource.mediationsdk.ISBannerSize;
 import com.ironsource.mediationsdk.IntegrationData;
 import com.ironsource.mediationsdk.IronSource;
 import com.ironsource.mediationsdk.IronSourceBannerLayout;
@@ -24,16 +25,15 @@ import com.ironsource.mediationsdk.sdk.RewardedVideoSmashListener;
 import com.ironsource.mediationsdk.utils.ErrorBuilder;
 import com.ironsource.mediationsdk.utils.IronSourceConstants;
 
-import com.vungle.warren.BannerAdConfig;
-import com.vungle.warren.Banners;
-import com.vungle.warren.Plugin;
-import com.vungle.warren.Vungle;
-import com.vungle.warren.AdConfig;
-import com.vungle.warren.InitCallback;
-import com.vungle.warren.VungleApiClient;
-import com.vungle.warren.VungleBanner;
-import com.vungle.warren.VungleSettings;
-import com.vungle.warren.error.VungleException;
+import com.vungle.ads.AdConfig;
+import com.vungle.ads.InitializationListener;
+import com.vungle.ads.Plugin;
+import com.vungle.ads.VungleAds;
+import com.vungle.ads.VungleException;
+import com.vungle.ads.VungleSettings;
+import com.vungle.ads.internal.network.VungleApiClient;
+import com.vungle.ads.internal.privacy.PrivacyConsent;
+import com.vungle.ads.internal.privacy.PrivacyManager;
 
 import org.json.JSONObject;
 
@@ -41,19 +41,13 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListener, InitCallback {
+class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListener {
 
     // Adapter version
     private static final String VERSION = BuildConfig.VERSION_NAME;
     private static final String GitHash = BuildConfig.GitHash;
-
-    // Vungle keys
-    private static final String APP_ID = "AppID";
-    private static final String PLACEMENT_ID = "PlacementId";
 
     // Meta data flags
     private static final String VUNGLE_COPPA_FLAG = "vungle_coppa";
@@ -67,25 +61,10 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
 
     private static final String LWS_SUPPORT_STATE = "isSupportedLWSByInstance";
 
-    // Rewarded video collections
-    private ConcurrentHashMap<String, RewardedVideoSmashListener> mPlacementIdToRewardedVideoSmashListener;
-    private ConcurrentHashMap<String, String> mPlacementIdToRewardedVideoServerData;
-    private CopyOnWriteArraySet<String> mRewardedVideoPlacementIdsForInitCallbacks;
-
-    // Interstitial maps
-    private ConcurrentHashMap<String, InterstitialSmashListener> mPlacementIdToInterstitialSmashListener;
-    private ConcurrentHashMap<String, String> mPlacementIdToInterstitialServerData;
-
-    // Banner maps
-    private ConcurrentHashMap<String, BannerSmashListener> mPlacementIdToBannerSmashListener;
-    private ConcurrentHashMap<String, String> mPlacementIdToBannerServerData;
-    protected ConcurrentHashMap<String, VungleBanner> mPlacementIdToBannerView;
-
     // members for network
     private static Boolean mConsent = null;
     private static Boolean mCCPA = null;
     private static String mAdOrientation = null;
-    private ISBannerSize mCurrentBannerSize = null;
 
     // init state possible values
     private enum InitState {
@@ -94,6 +73,10 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
         INIT_STATE_SUCCESS,
         INIT_STATE_FAILED
     }
+
+    VungleBannerAdapter bannerAdapter = new VungleBannerAdapter(getProviderName());
+    VungleInterstitialAdapter interstitialAdapter = new VungleInterstitialAdapter();
+    VungleRewardedVideoAdapter rewardedVideoAdapter = new VungleRewardedVideoAdapter();
 
     // Handle init callback for all adapter instances
     private static AtomicBoolean mWasInitCalled = new AtomicBoolean(false);
@@ -105,23 +88,10 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
         return new VungleAdapter(providerName);
     }
 
+    // o
     private VungleAdapter(String providerName) {
         super(providerName);
         IronLog.INTERNAL.verbose("");
-
-        // Rewarded video
-        mPlacementIdToRewardedVideoSmashListener = new ConcurrentHashMap<>();
-        mPlacementIdToRewardedVideoServerData = new ConcurrentHashMap<>();
-        mRewardedVideoPlacementIdsForInitCallbacks = new CopyOnWriteArraySet<>();
-
-        // Interstitial
-        mPlacementIdToInterstitialSmashListener = new ConcurrentHashMap<>();
-        mPlacementIdToInterstitialServerData = new ConcurrentHashMap<>();
-
-        // Banner
-        mPlacementIdToBannerSmashListener = new ConcurrentHashMap<>();
-        mPlacementIdToBannerServerData = new ConcurrentHashMap<>();
-        mPlacementIdToBannerView = new ConcurrentHashMap<>();
     }
 
     // Get the network and adapter integration data
@@ -144,7 +114,7 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
     }
 
     public static String getAdapterSDKVersion() {
-        return com.vungle.warren.BuildConfig.VERSION_NAME;
+        return com.vungle.ads.BuildConfig.VERSION_NAME;
     }
 
     //endregion
@@ -163,99 +133,59 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
 
             Plugin.addWrapperInfo(VungleApiClient.WrapperFramework.ironsource, getVersion());
 
-            VungleSettings vungleSettings = new VungleSettings.Builder()
-                    .disableBannerRefresh()
-                    .build();
+            VungleSettings vungleSettings = new VungleSettings();
+            Context context = ContextProvider.getInstance().getApplicationContext();
+            VungleAds.init(context, appId, new InitializationListener() {
+                @Override
+                public void onSuccess() {
+                    IronLog.ADAPTER_CALLBACK.verbose("Succeeded to initialize SDK");
 
-            Vungle.init(appId, ContextProvider.getInstance().getApplicationContext(), this, vungleSettings);
+                    mInitState = InitState.INIT_STATE_SUCCESS;
+
+                    if (mConsent != null) {
+                        setConsent(mConsent);
+                    }
+
+                    if (mCCPA != null) {
+                        setCCPAValue(mCCPA);
+                    }
+
+                    for (INetworkInitCallbackListener adapter : initCallbackListeners) {
+                        adapter.onNetworkInitCallbackSuccess();
+                    }
+
+                    initCallbackListeners.clear();
+                }
+
+                @Override
+                public void onError(@NonNull VungleException vungleException) {
+                    IronLog.ADAPTER_CALLBACK.verbose("Failed to initialize SDK");
+
+                    mInitState = InitState.INIT_STATE_FAILED;
+
+                    for (INetworkInitCallbackListener adapter : initCallbackListeners) {
+                        adapter.onNetworkInitCallbackFailed("Vungle sdk init failed - " +
+                                vungleException.getLocalizedMessage());
+                    }
+
+                    initCallbackListeners.clear();
+                }
+            }, vungleSettings);
         }
-    }
-
-    @Override
-    public void onSuccess() {
-        IronLog.ADAPTER_CALLBACK.verbose("Succeeded to initialize SDK");
-
-        mInitState = InitState.INIT_STATE_SUCCESS;
-
-        if (mConsent != null) {
-            setConsent(mConsent);
-        }
-
-        if (mCCPA != null) {
-            setCCPAValue(mCCPA);
-        }
-        
-        for (INetworkInitCallbackListener adapter : initCallbackListeners) {
-            adapter.onNetworkInitCallbackSuccess();
-        }
-
-        initCallbackListeners.clear();
-    }
-
-    @Override
-    public void onError(VungleException exception) {
-        IronLog.ADAPTER_CALLBACK.verbose("Failed to initialize SDK");
-
-        mInitState = InitState.INIT_STATE_FAILED;
-
-        for (INetworkInitCallbackListener adapter : initCallbackListeners) {
-            adapter.onNetworkInitCallbackFailed("Vungle sdk init failed - " + exception.getLocalizedMessage());
-        }
-
-        initCallbackListeners.clear();
-    }
-
-    @Override
-    public void onAutoCacheAdAvailable(String placementId) {
-        IronLog.ADAPTER_CALLBACK.verbose("placementId " + placementId);
     }
 
     @Override
     public void onNetworkInitCallbackSuccess() {
-        // rewarded video listener
-        for (String placementId : mPlacementIdToRewardedVideoSmashListener.keySet()) {
-            RewardedVideoSmashListener listener = mPlacementIdToRewardedVideoSmashListener.get(placementId);
-
-            if (mRewardedVideoPlacementIdsForInitCallbacks.contains(placementId)) {
-                listener.onRewardedVideoInitSuccess();
-            } else {
-                loadRewardedVideoInternal(placementId, listener, null);
-            }
-        }
-
-        // interstitial listener
-        for (InterstitialSmashListener listener : mPlacementIdToInterstitialSmashListener.values()) {
-            listener.onInterstitialInitSuccess();
-        }
-
-        // banner listener
-        for (BannerSmashListener listener : mPlacementIdToBannerSmashListener.values()) {
-            listener.onBannerInitSuccess();
-        }
+        rewardedVideoAdapter.onInitializationSuccess();
+        interstitialAdapter.onInitializationSuccess();
+        bannerAdapter.onInitializationSuccess();
     }
 
     @Override
     public void onNetworkInitCallbackFailed(String error) {
-        // rewarded video listener
-        for (String placementId : mPlacementIdToRewardedVideoSmashListener.keySet()) {
-            RewardedVideoSmashListener listener = mPlacementIdToRewardedVideoSmashListener.get(placementId);
-            
-            if (mRewardedVideoPlacementIdsForInitCallbacks.contains(placementId)) {
-                listener.onRewardedVideoInitFailed(ErrorBuilder.buildInitFailedError(error, IronSourceConstants.REWARDED_VIDEO_AD_UNIT));
-            } else {
-                listener.onRewardedVideoAvailabilityChanged(false);
-            }
-        }
-
-        // interstitial listener
-        for (InterstitialSmashListener listener : mPlacementIdToInterstitialSmashListener.values()) {
-            listener.onInterstitialInitFailed(ErrorBuilder.buildInitFailedError(error, IronSourceConstants.INTERSTITIAL_AD_UNIT));
-        }
-
-        // banner listener
-        for (BannerSmashListener listener : mPlacementIdToBannerSmashListener.values()) {
-            listener.onBannerInitFailed(ErrorBuilder.buildInitFailedError(error, IronSourceConstants.BANNER_AD_UNIT));
-        }
+        rewardedVideoAdapter.onInitializationFailure(error);
+        interstitialAdapter.onInitializationFailure(error);
+        bannerAdapter.onInitializationFailure(error);
     }
 
     @Override
@@ -269,25 +199,7 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
     public void initRewardedVideoWithCallback(String appKey, String userId, JSONObject config, RewardedVideoSmashListener listener) {
         String placementId = config.optString(PLACEMENT_ID);
         String appId = config.optString(APP_ID);
-
-        // Configuration Validation
-        if (TextUtils.isEmpty(placementId)) {
-            IronLog.INTERNAL.error("Missing param - " + PLACEMENT_ID);
-            listener.onRewardedVideoInitFailed(ErrorBuilder.buildInitFailedError("Missing param - " + PLACEMENT_ID, IronSourceConstants.REWARDED_VIDEO_AD_UNIT));
-            return;
-        }
-
-        if (TextUtils.isEmpty(appId)) {
-            IronLog.INTERNAL.error("Missing param - " + APP_ID);
-            listener.onRewardedVideoInitFailed(ErrorBuilder.buildInitFailedError("Missing param - " + APP_ID, IronSourceConstants.REWARDED_VIDEO_AD_UNIT));
-            return;
-        }
-
-        IronLog.ADAPTER_API.verbose("placementId = " + placementId + ", appId = " + appId);
-
-        //add to rewarded video listener map
-        mPlacementIdToRewardedVideoSmashListener.put(placementId, listener);
-        mRewardedVideoPlacementIdsForInitCallbacks.add(placementId);
+        rewardedVideoAdapter.initRewardedAd(placementId, appId, listener);
 
         switch (mInitState) {
             case INIT_STATE_NONE:
@@ -325,8 +237,7 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
 
         IronLog.ADAPTER_API.verbose("placementId = " + placementId + ", appId = " + appId);
 
-        //add to rewarded video listener map
-        mPlacementIdToRewardedVideoSmashListener.put(placementId, listener);
+        rewardedVideoAdapter.initAndLoadRewardedAd(placementId, appId, listener);//add to rewarded video listener map
 
         switch (mInitState) {
             case INIT_STATE_NONE:
@@ -334,11 +245,12 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
                 initSDK(appId);
                 break;
             case INIT_STATE_SUCCESS:
-                if (isRewardedVideoAdAvailableInternal(placementId)) {
+                if (rewardedVideoAdapter.isRewardedVideoAdAvailable(placementId)) {
                     IronLog.ADAPTER_API.verbose("ad already cached for placement Id " + placementId);
                     listener.onRewardedVideoAvailabilityChanged(true);
                 } else {
-                    loadRewardedVideoInternal(placementId, listener, null);
+                    IronLog.ADAPTER_API.verbose("placementId = " + placementId);
+                    rewardedVideoAdapter.loadRewardedAd(placementId, listener, null, createAdConfig());
                 }
                 break;
             case INIT_STATE_FAILED:
@@ -351,86 +263,28 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
     @Override
     public void loadRewardedVideoForBidding(JSONObject config, final RewardedVideoSmashListener listener, String serverData) {
         String placementId = config.optString(PLACEMENT_ID);
-        mPlacementIdToRewardedVideoServerData.put(placementId, serverData);
-        loadRewardedVideoInternal(placementId, listener, serverData);
+        IronLog.ADAPTER_API.verbose("placementId = " + placementId);
+        rewardedVideoAdapter.loadRewardedAd(placementId, listener, serverData, createAdConfig());
     }
 
     @Override
     public void fetchRewardedVideoForAutomaticLoad(final JSONObject config, final RewardedVideoSmashListener listener) {
-        String placementId = config.optString(PLACEMENT_ID);
-        
-        if (isRewardedVideoAdAvailableInternal(placementId)) {
-            IronLog.ADAPTER_API.verbose("ad already cached for placement Id " + placementId);
+        rewardedVideoAdapter.fetchRewardedVideoForAutomaticLoad(config, listener, createAdConfig());
 
-            RewardedVideoSmashListener smashListener = mPlacementIdToRewardedVideoSmashListener.get(placementId);
-            smashListener.onRewardedVideoAvailabilityChanged(true);
-
-        } else {
-            loadRewardedVideoInternal(placementId, listener, null);
-        }
-    }
-
-    private void loadRewardedVideoInternal(String placementId, RewardedVideoSmashListener listener, String serverData) {
-        IronLog.ADAPTER_API.verbose("placementId = " + placementId);
-
-        // create Vungle load listener
-        VungleRewardedVideoLoadListener vungleLoadListener = new VungleRewardedVideoLoadListener(listener);
-
-        if (!TextUtils.isEmpty(serverData)) {
-            // Load rewarded video for bidding instance
-            Vungle.loadAd(placementId, serverData, createAdConfig(), vungleLoadListener);
-        } else {
-            // Load rewarded video for non bidding instance
-            Vungle.loadAd(placementId, vungleLoadListener);
-        }
     }
 
     @Override
     public void showRewardedVideo(JSONObject config, final RewardedVideoSmashListener listener) {
-        String placementId = config.optString(PLACEMENT_ID);
-        IronLog.ADAPTER_API.verbose("placementId = " + placementId);
+        rewardedVideoAdapter.showRewardedVideo(config, listener);
 
-        // change rewarded video availability to false
-        listener.onRewardedVideoAvailabilityChanged(false);
-
-        // if we can play
-        if (isRewardedVideoAdAvailableInternal(placementId)) {
-            // dynamic user id
-            if (!TextUtils.isEmpty(getDynamicUserId())) {
-                Vungle.setIncentivizedFields(getDynamicUserId(), null, null, null, null);
-            }
-
-            // create Vungle play listener
-            VungleRewardedVideoPlayListener vunglePlayListener = new VungleRewardedVideoPlayListener(listener);
-
-            // get ad config
-            AdConfig adConfig = createAdConfig();
-
-            // get server data
-            String serverData = mPlacementIdToRewardedVideoServerData.get(placementId);
-
-            if (!TextUtils.isEmpty(serverData)) {
-                // Show rewarded video for bidding instance
-                Vungle.playAd(placementId, serverData, adConfig, vunglePlayListener);
-            } else {
-                // Show rewarded video for non bidding instance
-                Vungle.playAd(placementId, adConfig, vunglePlayListener);
-            }
-        } else {
-            IronLog.INTERNAL.error("There is no ad available for placementId = " + placementId);
-            listener.onRewardedVideoAdShowFailed(ErrorBuilder.buildNoAdsToShowError(IronSourceConstants.REWARDED_VIDEO_AD_UNIT));
-        }
     }
 
     @Override
     public boolean isRewardedVideoAvailable(JSONObject config) {
         String placementId = config.optString(PLACEMENT_ID);
         IronLog.ADAPTER_API.verbose("placementId = " + placementId);
+        return rewardedVideoAdapter.isRewardedVideoAdAvailable(placementId);
 
-        // Vungle cache ads that were loaded in the last week.
-        // This means that Vungle.canPlayAd() could return true for placements that we didn't try to load during this session.
-        // This is the reason we also check if the placementId is contained in the ConcurrentHashMap
-        return Vungle.isInitialized() && mPlacementIdToRewardedVideoSmashListener.containsKey(placementId) && isRewardedVideoAdAvailableInternal(placementId);
     }
 
     @Override
@@ -467,9 +321,6 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
 
         IronLog.ADAPTER_API.verbose("placementId = " + placementId + ", appId = " + appId);
 
-        //add to interstitial listener map
-        mPlacementIdToInterstitialSmashListener.put(placementId, listener);
-
         switch (mInitState) {
             case INIT_STATE_NONE:
             case INIT_STATE_IN_PROGRESS:
@@ -485,10 +336,10 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
         }
     }
 
+
     @Override
     public void loadInterstitialForBidding(JSONObject config, InterstitialSmashListener listener, String serverData) {
         final String placementId = config.optString(PLACEMENT_ID);
-        mPlacementIdToInterstitialServerData.put(placementId, serverData);
         loadInterstitialInternal(placementId, listener, serverData);
     }
 
@@ -500,16 +351,7 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
 
     private void loadInterstitialInternal(final String placementId, final InterstitialSmashListener listener, String serverData) {
         IronLog.ADAPTER_API.verbose("placementId = " + placementId);
-
-        VungleInterstitialLoadListener vungleLoadListener = new VungleInterstitialLoadListener(listener);
-
-        if (!TextUtils.isEmpty(serverData)) {
-            // Load interstitial for bidding instance
-            Vungle.loadAd(placementId, serverData, createAdConfig(), vungleLoadListener);
-        } else {
-            // Load interstitial for non bidding instance
-            Vungle.loadAd(placementId, vungleLoadListener);
-        }
+        interstitialAdapter.loadInterstitial(placementId, listener, serverData, createAdConfig());
     }
 
     @Override
@@ -517,45 +359,20 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
         String placementId = config.optString(PLACEMENT_ID);
         IronLog.ADAPTER_API.verbose("placementId = " + placementId);
 
-        // if we can play
-        if (isInterstitialAdAvailableInternal(placementId)) {
-            // create Vungle play listener
-            VungleInterstitialPlayListener vunglePlayListener = new VungleInterstitialPlayListener(listener);
+        interstitialAdapter.showInterstitial(placementId, listener);
 
-            // get ad config
-            AdConfig adConfig = createAdConfig();
-
-            // get server data
-            String serverData = mPlacementIdToInterstitialServerData.get(placementId);
-
-            if (!TextUtils.isEmpty(serverData)) {
-                // Show interstitial for bidding instance
-                Vungle.playAd(placementId, serverData, adConfig, vunglePlayListener);
-            } else {
-                // Show interstitial for non bidding instance
-                Vungle.playAd(placementId, adConfig, vunglePlayListener);
-            }
-        } else {
-            IronLog.INTERNAL.error("There is no ad available for placementId = " + placementId);
-            listener.onInterstitialAdShowFailed(ErrorBuilder.buildNoAdsToShowError(IronSourceConstants.INTERSTITIAL_AD_UNIT));
-        }
     }
 
     @Override
     public boolean isInterstitialReady(JSONObject config) {
         String placementId = config.optString(PLACEMENT_ID);
-
-        // Vungle cache ads that were loaded in the last week.
-        // This means that Vungle.canPlayAd() could return true for placements that we didn't try to load during this session.
-        // This is the reason we also check if the placementId is contained in the ConcurrentHashMap
-        return Vungle.isInitialized() && mPlacementIdToInterstitialSmashListener.containsKey(placementId) && isInterstitialAdAvailableInternal(placementId);
+        return interstitialAdapter.isInterstitialAdAvailable(placementId);
     }
 
     @Override
     public Map<String, Object> getInterstitialBiddingData(JSONObject config) {
         return getBiddingData();
     }
-
     //endregion
 
     //region Banner API
@@ -570,23 +387,7 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
         String placementId = config.optString(PLACEMENT_ID);
         String appId = config.optString(APP_ID);
 
-        // Configuration Validation
-        if (TextUtils.isEmpty(placementId)) {
-            IronLog.INTERNAL.error("Missing param - " + PLACEMENT_ID);
-            listener.onBannerInitFailed(ErrorBuilder.buildInitFailedError("Missing param - " + PLACEMENT_ID, IronSourceConstants.BANNER_AD_UNIT));
-            return;
-        }
-
-        if (TextUtils.isEmpty(appId)) {
-            IronLog.INTERNAL.error("Missing param - " + APP_ID);
-            listener.onBannerInitFailed(ErrorBuilder.buildInitFailedError("Missing param - " + APP_ID, IronSourceConstants.BANNER_AD_UNIT));
-            return;
-        }
-
-        IronLog.ADAPTER_API.verbose("placementId = " + placementId + ", appId = " + appId);
-
-        //add to banner listener map
-        mPlacementIdToBannerSmashListener.put(placementId, listener);
+        bannerAdapter.initBanners(appId, placementId, listener);
 
         switch (mInitState) {
             case INIT_STATE_NONE:
@@ -606,51 +407,13 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
     @Override
     public void loadBannerForBidding(IronSourceBannerLayout banner, JSONObject config, BannerSmashListener listener, String serverData) {
         final String placementId = config.optString(PLACEMENT_ID);
-        mPlacementIdToBannerServerData.put(placementId, serverData);
-        loadBannerInternal(placementId, banner, listener, serverData);
+        bannerAdapter.loadBanner(placementId, banner, listener, serverData);
     }
 
     @Override
     public void loadBanner(final IronSourceBannerLayout banner, JSONObject config, final BannerSmashListener listener) {
         String placementId = config.optString(PLACEMENT_ID);
-        loadBannerInternal(placementId, banner, listener, null);
-    }
-
-    private void loadBannerInternal(final String placementId, final IronSourceBannerLayout banner, final BannerSmashListener listener, final String serverData) {
-        IronLog.ADAPTER_API.verbose("placementId = " + placementId);
-
-        // verify size
-        if (!isBannerSizeSupported(banner.getSize())) {
-            IronLog.ADAPTER_API.verbose("size not supported, size = " + banner.getSize().getDescription());
-            listener.onBannerAdLoadFailed(ErrorBuilder.unsupportedBannerSize(getProviderName()));
-            return;
-        }
-        
-        // save banner size
-        mCurrentBannerSize = banner.getSize();
-
-        // run on main thread
-        postOnUIThread(new Runnable() {
-            @Override
-            public void run() {
-
-                // get size
-                AdConfig.AdSize bannerSize = getBannerSize(banner.getSize());
-                BannerAdConfig bannerAdConfig = new BannerAdConfig(bannerSize);
-                IronLog.ADAPTER_API.verbose("bannerSize = " + bannerSize);
-
-                // create Vungle load listener
-                VungleBannerLoadListener vungleLoadListener = new VungleBannerLoadListener(VungleAdapter.this, listener, mCurrentBannerSize);
-
-                if (!TextUtils.isEmpty(serverData)) {
-                    // Load banner for bidding instance
-                    Banners.loadBanner(placementId, serverData, bannerAdConfig, vungleLoadListener);
-                } else {
-                    // Load banner for non bidding instance
-                    Banners.loadBanner(placementId, bannerAdConfig, vungleLoadListener);
-                }
-            }
-        });
+        bannerAdapter.loadBanner(placementId, banner, listener, null);
     }
 
     @Override
@@ -661,32 +424,7 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
     @Override
     public void destroyBanner(JSONObject config) {
         final String placementId = config.optString(PLACEMENT_ID);
-        IronLog.ADAPTER_API.verbose("placementId = " + placementId);
-
-        if (mCurrentBannerSize == null) {
-            IronLog.ADAPTER_API.verbose("mCurrentBannerSize is null");
-            return;
-        }
-
-        // run on main thread
-        postOnUIThread(new Runnable() {
-            @Override
-            public void run() {
-                if (mPlacementIdToBannerView.containsKey(placementId)) {
-                    // get banner
-                    VungleBanner banner = mPlacementIdToBannerView.get(placementId);
-
-                    // Vungle destroy
-                    banner.destroyAd();
-
-                    // remove from map
-                    mPlacementIdToBannerView.remove(placementId);
-                }
-
-                mCurrentBannerSize = null;
-
-            }
-        });
+        bannerAdapter.destroyBanner(placementId);
     }
 
     @Override
@@ -707,20 +445,13 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
     @Override
     public void releaseMemory(IronSource.AD_UNIT adUnit, JSONObject config) {
         if (adUnit == IronSource.AD_UNIT.REWARDED_VIDEO) {
-            mPlacementIdToRewardedVideoSmashListener.clear();
-            mPlacementIdToRewardedVideoServerData.clear();
-            mRewardedVideoPlacementIdsForInitCallbacks.clear();
+            rewardedVideoAdapter.releaseMemory();
+
         } else if (adUnit == IronSource.AD_UNIT.INTERSTITIAL) {
-            mPlacementIdToInterstitialSmashListener.clear();
-            mPlacementIdToInterstitialServerData.clear();
+            interstitialAdapter.releaseMemory();
+
         } else if (adUnit == IronSource.AD_UNIT.BANNER) {
-            for (VungleBanner adView : mPlacementIdToBannerView.values()) {
-                adView.destroyAd();
-            }
-            mPlacementIdToBannerView.clear();
-            mPlacementIdToBannerSmashListener.clear();
-            mPlacementIdToBannerServerData.clear();
-            mCurrentBannerSize = null;
+            bannerAdapter.releaseMemory();
         }
     }
     //endregion
@@ -750,7 +481,8 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
         IronLog.ADAPTER_API.verbose("consent = " + consent);
 
         if (mInitState == InitState.INIT_STATE_SUCCESS) {
-            Vungle.updateConsentStatus(consent ? Vungle.Consent.OPTED_IN : Vungle.Consent.OPTED_OUT, CONSENT_MESSAGE_VERSION);
+            PrivacyConsent privacyConsent = consent ? PrivacyConsent.OPT_IN : PrivacyConsent.OPT_OUT;
+            VungleAds.updateGDPRConsent(privacyConsent, CONSENT_MESSAGE_VERSION);
         } else {
             mConsent = consent;
         }
@@ -784,9 +516,10 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
             // Given that this is opposite to the ironSource Mediation CCPA flag of do_not_sell
             // we will use the opposite value of what is passed to this method
             boolean optIn = !ccpa;
-            Vungle.Consent status = optIn ? Vungle.Consent.OPTED_IN : Vungle.Consent.OPTED_OUT;
-            IronLog.ADAPTER_API.verbose("key = Vungle.Consent" + ", value = " +  status.name());
-            Vungle.updateCCPAStatus(status);
+            PrivacyConsent status = optIn ? PrivacyConsent.OPT_IN : PrivacyConsent.OPT_OUT;
+
+            IronLog.ADAPTER_API.verbose("key = Vungle.Consent" + ", value = " + status.name());
+            PrivacyManager.INSTANCE.updateCcpaConsent(status);
         } else {
             mCCPA = ccpa;
         }
@@ -795,7 +528,7 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
     private void setCOPPAValue(final boolean isUserCoppa) {
         if (mInitState == InitState.INIT_STATE_NONE) {
             IronLog.ADAPTER_API.verbose("coppa = " + isUserCoppa);
-            Vungle.updateUserCoppaStatus(isUserCoppa);
+            PrivacyManager.INSTANCE.updateCoppaConsent(isUserCoppa);
         } else {
             IronLog.INTERNAL.verbose("COPPA value can be set only before the initialization of Vungle");
         }
@@ -813,7 +546,7 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
             return null;
         }
 
-        String bidderToken = Vungle.getAvailableBidTokens(ContextProvider.getInstance().getApplicationContext());
+        String bidderToken = VungleAds.getBiddingToken();
         String returnedToken = (!TextUtils.isEmpty(bidderToken)) ? bidderToken : "";
         String sdkVersion = getCoreSDKVersion();
         IronLog.ADAPTER_API.verbose("sdkVersion = " + sdkVersion);
@@ -840,137 +573,10 @@ class VungleAdapter extends AbstractAdapter implements INetworkInitCallbackListe
                     adconfig.setAdOrientation(AdConfig.AUTO_ROTATE);
                     break;
             }
-
             IronLog.INTERNAL.verbose("setAdOrientation to " + adconfig.getAdOrientation());
         }
 
         return adconfig;
     }
-
-    private boolean isBannerSizeSupported(ISBannerSize size) {
-        switch (size.getDescription()) {
-            case "BANNER":
-            case "LARGE":
-            case "RECTANGLE":
-            case "SMART":
-                return true;
-        }
-
-        return false;
-    }
-
-    protected AdConfig.AdSize getBannerSize(ISBannerSize size) {
-        switch (size.getDescription()) {
-            case "BANNER":
-            case "LARGE":
-                return AdConfig.AdSize.BANNER;
-            case "RECTANGLE":
-                return AdConfig.AdSize.VUNGLE_MREC;
-            case "SMART":
-                return AdapterUtils.isLargeScreen(ContextProvider.getInstance().getCurrentActiveActivity()) ? AdConfig.AdSize.BANNER_LEADERBOARD : AdConfig.AdSize.BANNER;
-        }
-
-        return null;
-    }
-
-    protected VungleBanner createVungleBannerAdView(String placementId, AdConfig.AdSize bannerSize) {
-        BannerAdConfig adConfig = new BannerAdConfig(bannerSize);
-        boolean isRectangle = bannerSize == AdConfig.AdSize.VUNGLE_MREC;
-
-        if (isRectangle) {
-            // Vungle MREC plays with sound enabled as a default
-            adConfig.setMuted(true);
-        }
-
-        // get server data
-        String serverData = mPlacementIdToBannerServerData.get(placementId);
-
-        // get banner smash listener
-        BannerSmashListener smashListener = mPlacementIdToBannerSmashListener.get(placementId);
-
-        // create Vungle play listener
-        VungleBannerPlayListener playListener = new VungleBannerPlayListener(smashListener);
-
-        // get banner view
-        VungleBanner vungleBanner;
-
-        if (!TextUtils.isEmpty(serverData)) {
-            vungleBanner = Banners.getBanner(placementId, serverData, adConfig, playListener);
-        } else {
-            vungleBanner = Banners.getBanner(placementId, adConfig, playListener);
-        }
-
-        if (vungleBanner != null) {
-            mPlacementIdToBannerView.put(placementId, vungleBanner);
-        }
-
-        return vungleBanner;
-    }
-
-    protected FrameLayout.LayoutParams getBannerLayoutParams(ISBannerSize size) {
-        FrameLayout.LayoutParams layoutParams = new FrameLayout.LayoutParams(0,0);
-
-        Activity activity = ContextProvider.getInstance().getCurrentActiveActivity();
-
-        switch (size.getDescription()) {
-            case "BANNER":
-            case "LARGE":
-                layoutParams = new FrameLayout.LayoutParams(AdapterUtils.dpToPixels(activity, 320), AdapterUtils.dpToPixels(activity, 50));
-                break;
-            case "RECTANGLE":
-                layoutParams = new FrameLayout.LayoutParams(AdapterUtils.dpToPixels(activity, 300), AdapterUtils.dpToPixels(activity, 250));
-                break;
-            case "SMART":
-                if (AdapterUtils.isLargeScreen(activity)) {
-                    layoutParams = new FrameLayout.LayoutParams(AdapterUtils.dpToPixels(activity, 728), AdapterUtils.dpToPixels(activity, 90));
-                } else {
-                    layoutParams = new FrameLayout.LayoutParams(AdapterUtils.dpToPixels(activity, 320), AdapterUtils.dpToPixels(activity, 50));
-                }
-
-                break;
-        }
-
-        // set gravity
-        layoutParams.gravity = Gravity.CENTER;
-
-        return layoutParams;
-    }
-
-    protected boolean isRewardedVideoAdAvailableInternal(String placementId) {
-        if (mPlacementIdToRewardedVideoServerData.containsKey(placementId)) {
-            // get rewarded video server data
-            String serverData = mPlacementIdToRewardedVideoServerData.get(placementId);
-
-            // return if ad available or not
-            return Vungle.canPlayAd(placementId, serverData);
-        }
-
-        return Vungle.canPlayAd(placementId);
-    }
-
-    protected boolean isInterstitialAdAvailableInternal(String placementId) {
-        if (mPlacementIdToInterstitialServerData.containsKey(placementId)) {
-            // get interstitial server data
-            String serverData = mPlacementIdToInterstitialServerData.get(placementId);
-
-            // return if ad available or not
-            return Vungle.canPlayAd(placementId, serverData);
-        }
-
-        return Vungle.canPlayAd(placementId);
-    }
-
-    protected boolean isBannerAdAvailableInternal(String placementId, AdConfig.AdSize adSize) {
-        if (mPlacementIdToBannerServerData.containsKey(placementId)) {
-            // get banner server data
-            String serverData = mPlacementIdToBannerServerData.get(placementId);
-
-            // return if ad available or not
-            return Banners.canPlayAd(placementId, serverData, adSize);
-        }
-
-        return Banners.canPlayAd(placementId, adSize);
-    }
-
     //endregion
 }

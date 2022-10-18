@@ -22,12 +22,12 @@ repositories {
 }
 
 android {
-    compileSdkVersion 30
+    compileSdkVersion 33
     buildToolsVersion "30.0.3"
 
     defaultConfig {
         minSdkVersion 16
-        targetSdkVersion 30
+        targetSdkVersion 33
         versionCode 1
         versionName adapterVersion
         buildConfigField "String", "GitHash", "\"${getGitHash()}\""
@@ -51,8 +51,10 @@ android {
 }
 
  dependencies {
-    implementation 'com.ironsource.sdk:mediationsdk:7.2.3.1'
-    implementation 'com.vungle:publisher-sdk-android:6.12.0'
+    implementation 'com.ironsource.sdk:mediationsdk:7.2.4.1'
+
+     implementation(project(":vng-android-sdk:vungle-ads"))
+//    implementation 'com.vungle:publisher-sdk-android:6.12.0'
 
 }
 
