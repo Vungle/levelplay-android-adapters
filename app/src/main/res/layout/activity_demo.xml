@@ -1,0 +1,78 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <TextView
+        android:id="@+id/appKeyTV"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:hint="appKey" />
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@+id/banner_footer"
+        android:layout_marginTop="30dp">
+
+        <Button
+            android:id="@+id/rv_button"
+            android:layout_width="250dp"
+            android:layout_height="wrap_content"
+            android:layout_centerHorizontal="true"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/ironsource_button_shape"
+            android:padding="5dp"
+            android:text="initializing rewarded video" />
+
+        <Button
+            android:id="@+id/is_load_button"
+            android:layout_width="125dp"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/rv_button"
+            android:layout_alignStart="@+id/rv_button"
+            android:layout_alignLeft="@+id/rv_button"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/ironsource_button_shape"
+            android:text="Load Interstitial" />
+
+        <Button
+            android:id="@+id/is_show_button"
+            android:layout_width="125dp"
+            android:layout_height="wrap_content"
+            android:layout_alignTop="@+id/is_load_button"
+            android:layout_toEndOf="@+id/is_load_button"
+            android:layout_toRightOf="@+id/is_load_button"
+            android:background="@drawable/ironsource_button_shape"
+            android:text="Show Interstitial" />
+
+        <Button
+            android:id="@+id/is_load_banner_button"
+            android:layout_width="125dp"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/is_load_button"
+            android:layout_alignStart="@+id/is_load_button"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/ironsource_button_shape"
+            android:text="Load Banner" />
+
+        <Button
+            android:id="@+id/is_close_banner_button"
+            android:layout_width="125dp"
+            android:layout_height="wrap_content"
+            android:layout_alignTop="@+id/is_load_banner_button"
+            android:layout_toEndOf="@+id/is_load_banner_button"
+            android:layout_toRightOf="@+id/is_load_banner_button"
+            android:background="@drawable/ironsource_button_shape"
+            android:text="Destroy Banner" />
+
+    </RelativeLayout>
+
+    <FrameLayout
+        android:id="@+id/banner_footer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="20dp"
+        android:visibility="visible" />
+
+</RelativeLayout>

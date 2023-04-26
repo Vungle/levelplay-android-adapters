@@ -1,0 +1,4 @@
+rootProject.name = "IronSource Adapter Jitpack Publish"
+
+include ':app'
+include ':levelplay-android-adapters'

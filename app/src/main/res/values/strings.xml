@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Vungle IronSource Adapter QA Test App</string>
+    <string name="initializing">Initializing</string>
+    <string name="show">Show</string>
+    <string name="load">Load</string>
+    <string name="rv">Rewarded Video</string>
+    <string name="ow">Offerwall</string>
+    <string name="is">Interstitial</string>
+    <string name="version">IronSource SDK version: %1$s\nAdapter version: %2$s\nVungle SDK version: %3$s\nTest App version: %4$s</string>
+    <string name="rewarded_dialog_header">Video Rewarded</string>
+    <string name="rewarded_dialog_message">You have been rewarded</string>
+
+    <string-array name="consent_options">
+        <item>Consent Given</item>
+        <item>Consent Denied</item>
+    </string-array>
+</resources>
