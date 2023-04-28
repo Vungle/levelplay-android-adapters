@@ -19,7 +19,7 @@ allprojects {
         mavenCentral()
         maven("https://android-sdk.is.com/")
         maven("https://jitpack.io")
-        maven("https://s01.oss.sonatype.org/content/groups/staging/")
+//        maven("https://s01.oss.sonatype.org/content/groups/staging/")
     }
 }
 

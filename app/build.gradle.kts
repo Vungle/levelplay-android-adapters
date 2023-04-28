@@ -62,6 +62,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-ads-identifier:18.0.1")
 
     implementation(project(":levelplay-android-adapters"))
+//    implementation("com.github.vungle:levelplay-android-adapters:25358ed561")
 
     implementation("androidx.appcompat:appcompat:1.5.1")
     implementation("com.google.android.material:material:1.4.0")
