@@ -11,7 +11,7 @@ android {
         targetSdk = 33
         versionCode = 70000
         versionName = "7.0.0"
-        versionNameSuffix = "-RC4"
+        versionNameSuffix = ""
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -58,7 +58,7 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.9.0")
-    implementation("com.ironsource.sdk:mediationsdk:7.3.0.1")
+    implementation("com.ironsource.sdk:mediationsdk:7.3.1")
     implementation("com.google.android.gms:play-services-ads-identifier:18.0.1")
 
     implementation(project(":levelplay-android-adapters"))
