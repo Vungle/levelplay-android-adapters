@@ -71,7 +71,7 @@ class VungleAdapter private constructor(providerName: String) :
 
         @JvmStatic
         fun getAdapterSDKVersion(): String {
-            return com.vungle.ads.BuildConfig.VERSION_NAME
+            return VungleAds.getSdkVersion()
         }
     }
 
