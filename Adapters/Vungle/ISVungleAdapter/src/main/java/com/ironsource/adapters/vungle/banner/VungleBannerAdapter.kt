@@ -1,5 +1,7 @@
 package com.ironsource.adapters.vungle.banner
 
+import android.content.Context
+import android.util.Log
 import android.view.Gravity
 import android.widget.FrameLayout
 import com.ironsource.adapters.vungle.VungleAdapter
@@ -17,6 +19,8 @@ import com.vungle.ads.BannerAd
 import com.vungle.ads.BannerAdSize
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.max
+import kotlin.math.min
 
 class VungleBannerAdapter(adapter: VungleAdapter) :
     AbstractBannerAdapter<VungleAdapter>(adapter) {
@@ -198,8 +202,86 @@ class VungleBannerAdapter(adapter: VungleAdapter) :
         }
     }
 
+    override fun getAdaptiveHeight(width: Int): Int {
+        return getCurrentOrientationAnchoredAdaptiveBannerAdSize(
+            ContextProvider.getInstance().applicationContext,
+            width)?.height ?: 0
+    }
+
+    private fun getCurrentOrientationAnchoredAdaptiveBannerAdSize(
+        context: Context,
+        width: Int
+    ): BannerAdSize? {
+        return getBannerAdSize(context, width, 50, 0)
+    }
+
+    private fun getDeviceHeightInDp(context: Context, orientation: Int): Int {
+        var context: Context? = context
+        var orientation = orientation
+        return if (context == null) {
+            -1
+        } else {
+            if (context.applicationContext != null) {
+                context = context.applicationContext
+            }
+            val resource = context!!.resources
+            if (resource == null) {
+                -1
+            } else {
+                val displayMetrics = resource.displayMetrics
+                if (displayMetrics == null) {
+                    -1
+                } else {
+                    val configuration = resource.configuration
+                    if (configuration == null) {
+                        -1
+                    } else {
+                        val curOrientation = configuration.orientation
+                        if (orientation == 0) {
+                            orientation = curOrientation
+                        }
+                        if (orientation == curOrientation) Math.round(
+                            displayMetrics.heightPixels.toFloat() / displayMetrics.density
+                        ) else Math.round(
+                            displayMetrics.widthPixels.toFloat() / displayMetrics.density
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun getBannerAdSize(
+        context: Context,
+        width: Int,
+        minHeight: Int,
+        orientation: Int
+    ): BannerAdSize? {
+        var minHeight = minHeight
+        var height: Int = getDeviceHeightInDp( context, orientation )
+        return if (height == -1) {
+            null
+        } else {
+            minHeight =
+                min(90.0, Math.round(height.toFloat() * 0.15f).toDouble()).toInt()
+            height = if (width > 655) {
+                Math.round(width.toFloat() / 728.0f * 90.0f)
+            } else if (width > 632) {
+                81
+            } else if (width > 526) {
+                Math.round(width.toFloat() / 468.0f * 60.0f)
+            } else if (width > 432) {
+                68
+            } else {
+                Math.round(width.toFloat() / 320.0f * 50.0f)
+            }
+            height = max(min(height, minHeight), 50)
+            BannerAdSize.getInlineAdaptiveBannerAdSize(width, height)
+        }
+    }
+
     private fun getBannerSize(bannerSize: ISBannerSize): BannerAdSize? {
-        return when (bannerSize.description) {
+        val vngAdSize = when (bannerSize.description) {
             "BANNER", "LARGE" -> BannerAdSize.BANNER
             "RECTANGLE" -> BannerAdSize.VUNGLE_MREC
             "SMART" ->
@@ -211,6 +293,26 @@ class VungleBannerAdapter(adapter: VungleAdapter) :
 
             else -> null
         }
+
+        try {
+            if (bannerSize.isAdaptive && vngAdSize != null) {
+                val context = ContextProvider.getInstance().applicationContext
+                val adaptiveSize: BannerAdSize? =
+                    getCurrentOrientationAnchoredAdaptiveBannerAdSize(context, bannerSize.containerParams.width)
+                Log.w("VungleBannerAdapter",
+                    (((("default height - " + vngAdSize.height) +
+                            " adaptive height - " + adaptiveSize?.height) +
+                            " container height - " + bannerSize.containerParams.height) +
+                            " default width - " + vngAdSize.width) +
+                            " container width - " + bannerSize.containerParams.width
+                )
+                return adaptiveSize
+            }
+        } catch (e: Exception) {
+            IronLog.INTERNAL.error("containerParams is not supported")
+        }
+
+        return vngAdSize
     }
 
     override fun getBannerBiddingData(
