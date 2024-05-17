@@ -1,8 +1,6 @@
 package com.ironsource.adapters.vungle.banner
 
 import android.util.Log
-import android.view.Gravity
-import android.widget.FrameLayout
 import com.ironsource.adapters.vungle.VungleAdapter
 import com.ironsource.environment.ContextProvider
 import com.ironsource.mediationsdk.AdapterUtils
@@ -15,7 +13,6 @@ import com.ironsource.mediationsdk.sdk.BannerSmashListener
 import com.ironsource.mediationsdk.utils.ErrorBuilder
 import com.ironsource.mediationsdk.utils.IronSourceConstants
 import com.vungle.ads.BannerAd
-import com.vungle.ads.BannerAdSize
 import com.vungle.ads.VungleAdSize
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
@@ -51,10 +48,8 @@ class VungleBannerAdapter(adapter: VungleAdapter) :
     }
 
     override fun getAdaptiveHeight(width: Int): Int {
-        return VungleAdSize.getCurrentOrientationAdSizeWithWidth(
-            ContextProvider.getInstance().applicationContext,
-            width
-        ).height
+        val context = ContextProvider.getInstance().applicationContext
+        return VungleAdSize.getAdSizeWithWidth(context, width).height
     }
 
     private fun initBannersInternal(
@@ -163,18 +158,14 @@ class VungleBannerAdapter(adapter: VungleAdapter) :
         }
         val bannerSize = getBannerSize(banner.size)
 
+        Log.e("VungleBannerAdapter", "bannerSize = ${bannerSize?.width} x ${bannerSize?.height}")
+
         // check if banner size is null or not
         if (bannerSize == null) {
             listener.onBannerAdLoadFailed(ErrorBuilder.unsupportedBannerSize(adapter.providerName))
             return
         }
-        val context = ContextProvider.getInstance().applicationContext
-        val layoutParams = FrameLayout.LayoutParams(
-            AdapterUtils.dpToPixels(context, bannerSize.width),
-            AdapterUtils.dpToPixels(context, bannerSize.height),
-            Gravity.CENTER
-        )
-        val vungleBannerAdListener = VungleBannerAdListener(listener, placementId, layoutParams)
+        val vungleBannerAdListener = VungleBannerAdListener(listener, placementId)
 
         val vungleBanner = BannerAd(
             ContextProvider.getInstance().applicationContext,
@@ -211,14 +202,19 @@ class VungleBannerAdapter(adapter: VungleAdapter) :
 
     private fun getBannerSize(bannerSize: ISBannerSize): VungleAdSize? {
         val vungleAdSize = when (bannerSize.description) {
-            "BANNER", "LARGE" -> BannerAdSize.BANNER
-            "RECTANGLE" -> BannerAdSize.VUNGLE_MREC
+            "BANNER", "LARGE" -> VungleAdSize.BANNER
+            "RECTANGLE" -> VungleAdSize.MREC
             "SMART" ->
                 (if (AdapterUtils.isLargeScreen(ContextProvider.getInstance().applicationContext)) {
-                    BannerAdSize.BANNER_LEADERBOARD
+                    VungleAdSize.BANNER_LEADERBOARD
                 } else {
-                    BannerAdSize.BANNER
+                    VungleAdSize.BANNER
                 })
+
+            "CUSTOM" -> VungleAdSize.getAdSizeWithWidthAndHeight(
+                bannerSize.width,
+                bannerSize.height
+            )
 
             else -> null
         }
@@ -226,17 +222,14 @@ class VungleBannerAdapter(adapter: VungleAdapter) :
         try {
             if (bannerSize.isAdaptive && vungleAdSize != null) {
                 val context = ContextProvider.getInstance().applicationContext
-                val adaptiveSize = VungleAdSize.getCurrentOrientationAdSizeWithWidth(
-                    context,
+                val adaptiveSize = VungleAdSize.getAdSizeWithWidth(context,
                     bannerSize.containerParams.width
                 )
-                Log.w(
-                    "VungleBannerAdapter",
-                    ((("default height - " + vungleAdSize.height) +
-                            " default width - " + vungleAdSize.width) +
-                            " container height - " + bannerSize.containerParams.height) +
-                            " container width - " + bannerSize.containerParams.width
-                )
+                IronLog.ADAPTER_API.warning("default height - ${vungleAdSize.height} " +
+                        "default width - ${vungleAdSize.width} " +
+                        "container height - ${bannerSize.containerParams.height} " +
+                        "container width - ${bannerSize.containerParams.width}")
+
                 return adaptiveSize
             }
         } catch (e: Exception) {

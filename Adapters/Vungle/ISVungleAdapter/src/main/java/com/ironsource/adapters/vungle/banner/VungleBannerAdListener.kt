@@ -1,20 +1,23 @@
 package com.ironsource.adapters.vungle.banner
 
+import android.view.Gravity
 import android.widget.FrameLayout
 import com.ironsource.adapters.vungle.VungleAdapter
+import com.ironsource.environment.ContextProvider
+import com.ironsource.mediationsdk.AdapterUtils
 import com.ironsource.mediationsdk.logger.IronLog
 import com.ironsource.mediationsdk.logger.IronSourceError
 import com.ironsource.mediationsdk.sdk.BannerSmashListener
 import com.ironsource.mediationsdk.utils.ErrorBuilder
 import com.vungle.ads.BannerAd
 import com.vungle.ads.BannerAdListener
+import com.vungle.ads.BannerView
 import com.vungle.ads.BaseAd
 import com.vungle.ads.VungleError
 
 class VungleBannerAdListener(
     private val mListener: BannerSmashListener,
-    private val mPlacementId: String,
-    private val mLayoutParams: FrameLayout.LayoutParams,
+    private val mPlacementId: String
 ) : BannerAdListener {
 
     /**
@@ -24,9 +27,20 @@ class VungleBannerAdListener(
      */
     override fun onAdLoaded(baseAd: BaseAd) {
         IronLog.ADAPTER_CALLBACK.verbose("placementId = " + baseAd.placementId)
-        (baseAd as? BannerAd)?.getBannerView()?.let { bannerView ->
-            mListener.onBannerAdLoaded(bannerView, mLayoutParams)
-        } ?: run {
+
+        var bannerView: BannerView? = null
+        if (baseAd is BannerAd) {
+            val context = ContextProvider.getInstance().applicationContext
+            val layoutParams = FrameLayout.LayoutParams(
+                AdapterUtils.dpToPixels(context, baseAd.adSize.width),
+                AdapterUtils.dpToPixels(context, baseAd.adSize.height),
+                Gravity.CENTER
+            )
+            bannerView = baseAd.getBannerView()?.also {
+                mListener.onBannerAdLoaded(it, layoutParams)
+            }
+        }
+        if (bannerView == null) {
             IronLog.ADAPTER_CALLBACK.error("banner view is null")
             mListener.onBannerAdLoadFailed(ErrorBuilder.buildLoadFailedError("Vungle LoadBanner failed - banner view is null"))
         }
