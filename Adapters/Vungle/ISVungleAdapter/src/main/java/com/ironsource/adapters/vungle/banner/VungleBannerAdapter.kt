@@ -12,8 +12,8 @@ import com.ironsource.mediationsdk.logger.IronLog
 import com.ironsource.mediationsdk.sdk.BannerSmashListener
 import com.ironsource.mediationsdk.utils.ErrorBuilder
 import com.ironsource.mediationsdk.utils.IronSourceConstants
-import com.vungle.ads.BannerAd
 import com.vungle.ads.VungleAdSize
+import com.vungle.ads.VungleBannerView
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 
@@ -21,7 +21,7 @@ class VungleBannerAdapter(adapter: VungleAdapter) :
     AbstractBannerAdapter<VungleAdapter>(adapter) {
     private val mBannerPlacementToListenerMap: ConcurrentHashMap<String, BannerSmashListener> =
         ConcurrentHashMap()
-    private val mPlacementToBannerAd: ConcurrentHashMap<String, BannerAd> =
+    private val mPlacementToBannerAd: ConcurrentHashMap<String, VungleBannerView> =
         ConcurrentHashMap()
 
     //endregion
@@ -165,15 +165,14 @@ class VungleBannerAdapter(adapter: VungleAdapter) :
             listener.onBannerAdLoadFailed(ErrorBuilder.unsupportedBannerSize(adapter.providerName))
             return
         }
-        val vungleBannerAdListener = VungleBannerAdListener(listener, placementId)
 
-        val vungleBanner = BannerAd(
+        val vungleBanner = VungleBannerView(
             ContextProvider.getInstance().applicationContext,
             placementId,
             bannerSize
         ).apply {
 
-            adListener = vungleBannerAdListener
+            adListener = VungleBannerAdListener(listener, this)
         }
         mPlacementToBannerAd[placementId] = vungleBanner
         IronLog.ADAPTER_API.verbose("bannerSize = $bannerSize")
