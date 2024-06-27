@@ -1,6 +1,5 @@
 package com.ironsource.adapters.vungle.banner
 
-import android.util.Log
 import com.ironsource.adapters.vungle.VungleAdapter
 import com.ironsource.environment.ContextProvider
 import com.ironsource.mediationsdk.AdapterUtils
@@ -45,11 +44,6 @@ class VungleBannerAdapter(adapter: VungleAdapter) :
     ) {
         IronLog.ADAPTER_API.verbose()
         initBannersInternal(config, listener)
-    }
-
-    override fun getAdaptiveHeight(width: Int): Int {
-        val context = ContextProvider.getInstance().applicationContext
-        return VungleAdSize.getAdSizeWithWidth(context, width).height
     }
 
     private fun initBannersInternal(
@@ -158,8 +152,6 @@ class VungleBannerAdapter(adapter: VungleAdapter) :
         }
         val bannerSize = getBannerSize(banner.size)
 
-        Log.e("VungleBannerAdapter", "bannerSize = ${bannerSize?.width} x ${bannerSize?.height}")
-
         // check if banner size is null or not
         if (bannerSize == null) {
             listener.onBannerAdLoadFailed(ErrorBuilder.unsupportedBannerSize(adapter.providerName))
@@ -200,7 +192,7 @@ class VungleBannerAdapter(adapter: VungleAdapter) :
     }
 
     private fun getBannerSize(bannerSize: ISBannerSize): VungleAdSize? {
-        val vungleAdSize = when (bannerSize.description) {
+        return when (bannerSize.description) {
             "BANNER", "LARGE" -> VungleAdSize.BANNER
             "RECTANGLE" -> VungleAdSize.MREC
             "SMART" ->
@@ -217,25 +209,6 @@ class VungleBannerAdapter(adapter: VungleAdapter) :
 
             else -> null
         }
-
-        try {
-            if (bannerSize.isAdaptive && vungleAdSize != null) {
-                val context = ContextProvider.getInstance().applicationContext
-                val adaptiveSize = VungleAdSize.getAdSizeWithWidth(context,
-                    bannerSize.containerParams.width
-                )
-                IronLog.ADAPTER_API.warning("default height - ${vungleAdSize.height} " +
-                        "default width - ${vungleAdSize.width} " +
-                        "container height - ${bannerSize.containerParams.height} " +
-                        "container width - ${bannerSize.containerParams.width}")
-
-                return adaptiveSize
-            }
-        } catch (e: Exception) {
-            IronLog.INTERNAL.error("containerParams is not supported")
-        }
-
-        return vungleAdSize
     }
 
     override fun getBannerBiddingData(
