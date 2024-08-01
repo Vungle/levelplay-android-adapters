@@ -218,8 +218,9 @@ class VungleBannerAdapter(adapter: VungleAdapter) :
         try {
             if (bannerSize.isAdaptive && vungleAdSize != null) {
                 val context = ContextProvider.getInstance().applicationContext
-                val adaptiveSize = VungleAdSize.getAdSizeWithWidth(context,
-                    bannerSize.containerParams.width
+                val adaptiveSize = VungleAdSize.getAdSizeWithWidthAndHeight(
+                    bannerSize.width,
+                    0
                 )
                 IronLog.ADAPTER_API.warning("default height - ${vungleAdSize.height} " +
                         "default width - ${vungleAdSize.width} " +
