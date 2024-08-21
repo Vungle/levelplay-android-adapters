@@ -52,7 +52,8 @@ android {
 
  dependencies {
     implementation 'com.ironsource.sdk:mediationsdk:8.0.0'
-    implementation 'com.vungle:vungle-ads:7.4.0'
+//    implementation 'com.vungle:vungle-ads:7.4.0'
+     implementation 'com.github.Vungle:vng-android-sdk:b1d2113bb4'
  }
 
 task sourcesJar(type: Jar) {
