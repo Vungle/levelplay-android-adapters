@@ -217,7 +217,6 @@ class VungleBannerAdapter(adapter: VungleAdapter) :
 
         try {
             if (bannerSize.isAdaptive && vungleAdSize != null) {
-                val context = ContextProvider.getInstance().applicationContext
                 val adaptiveSize = VungleAdSize.getAdSizeWithWidthAndHeight(
                     bannerSize.width,
                     0
