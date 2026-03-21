@@ -1,0 +1,39 @@
+conventions:
+  - id: adapter-structure
+    description: >
+      Each network adapter lives under Adapters/{Network}/IS{Network}Adapter/
+      as an Android Library module. All adapters extend AbstractAdapter and
+      implement INetworkInitCallbackListener. Separate listener classes for
+      each ad format's load and play events.
+    applies_to: "Adapters/**/*.{java,kt}"
+
+  - id: naming-conventions
+    description: >
+      Adapter class: IS{Network}Adapter. Listener classes follow
+      IS{Network}{Format}Listener pattern (e.g., ISVungleRewardedVideoListener).
+      Java is the primary language; Kotlin used only for Pangle and Yahoo
+      adapters. Standard Android/Java naming conventions.
+    applies_to: "Adapters/**/*.{java,kt}"
+
+  - id: ad-format-support
+    description: >
+      All adapters must support three formats: Rewarded Video, Interstitial,
+      and Banner. Each format has distinct load and play listener classes.
+      The AbstractAdapter base class provides shared format registration
+      and lifecycle management.
+    applies_to: "Adapters/**/*.{java,kt}"
+
+  - id: version-management
+    description: >
+      Adapter versions are tracked per network. The adapter version and
+      underlying SDK version are declared in the adapter's build.gradle.
+      Version history is maintained in adapter-level documentation.
+    applies_to: "**/build.gradle"
+
+  - id: aar-build-output
+    description: >
+      The custom Gradle task createAAR builds release AAR artifacts and
+      places them in the ReleaseCandidates/ directory. This is the primary
+      build command: ./gradlew createAAR. AAR files are the distribution
+      format for adapters.
+    applies_to: "**/build.gradle"
