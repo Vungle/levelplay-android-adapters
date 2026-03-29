@@ -1,0 +1,8 @@
+# Claude knowledge layer metadata
+generated: 2026-03-23T00:00:00Z
+source_commit: 0363b552ca36e057c49585517300addd82af1255
+stale_if_older_than: 7d
+artifacts:
+  git-intelligence.json: { bytes: 826, tokens: ~206 }
+total_bytes: 826
+total_tokens: ~206

@@ -1,0 +1,29 @@
+review_rules:
+  - path: "Adapters/**/*.{java,kt}"
+    rules:
+      - Adapter must extend AbstractAdapter and implement INetworkInitCallbackListener
+      - All three ad formats (Rewarded Video, Interstitial, Banner) must be supported
+      - Load and play listeners must be separate classes per format
+      - SDK initialization must use the callback listener pattern
+      - All ad callbacks must be invoked on the main/UI thread
+      - Null safety checks required before invoking listener methods
+
+  - path: "**/build.gradle"
+    rules:
+      - minSdkVersion must be 16 or higher as required by the network SDK
+      - targetSdkVersion should be 30 or current project standard
+      - mediationsdk dependency version must be compatible with 7.2.4.1
+      - createAAR task must be present and correctly configured
+      - No snapshot dependencies in release builds
+
+  - path: "Adapters/**/*Listener*.{java,kt}"
+    rules:
+      - Listener classes must handle all callback methods for their format
+      - Load listeners handle ad load success/failure
+      - Play listeners handle ad show, click, close, and reward events
+      - Must not hold strong references that could cause memory leaks
+
+  - path: "ReleaseCandidates/**"
+    rules:
+      - Only AAR artifacts should be committed to this directory
+      - AAR filenames must include adapter name and version
