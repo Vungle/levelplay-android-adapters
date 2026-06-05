@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 5.14.0
+* Fixed fullscreen ad load failures in multi-ad-unit and load-while-show flows
+
+## Version 5.13.0
+* Fixed missing fullscreen ad lifecycle callbacks
+
 ## Version 5.12.0
 * Supporting SDK version 17.1.51
 

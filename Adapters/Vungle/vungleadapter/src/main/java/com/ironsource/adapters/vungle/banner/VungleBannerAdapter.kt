@@ -175,10 +175,8 @@ class VungleBannerAdapter(adapter: VungleAdapter) :
             adapterAdFormat = VungleAdapter.ADAPTER_FORMAT_BANNER
         }
 
-        // Log custom banner size mismatch for non-inline placements
         if (!VungleAds.isInline(placementId) && bannerSize.description == "CUSTOM") {
-            vungleBanner.adapterAdFormat =
-                "${VungleAdapter.ADAPTER_FORMAT_BANNER}-${bannerSize.description.lowercase()}"
+            vungleBanner.adapterAdFormat = "${VungleAdapter.ADAPTER_FORMAT_BANNER}-${bannerSize.description.lowercase()}"
             val message = "CustomBannerSizeMismatch:w-${bannerSize.width}|h-${bannerSize.height}"
             VungleMediationLogger.logError(vungleBanner, message)
         }

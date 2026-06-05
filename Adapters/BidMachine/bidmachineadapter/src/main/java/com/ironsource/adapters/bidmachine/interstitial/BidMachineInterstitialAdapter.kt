@@ -1,149 +1,109 @@
 package com.ironsource.adapters.bidmachine.interstitial
 
-import android.text.TextUtils
+import android.app.Activity
+import android.content.Context
 import com.ironsource.adapters.bidmachine.BidMachineAdapter
-import com.ironsource.environment.ContextProvider
-import com.ironsource.mediationsdk.adapter.AbstractInterstitialAdapter
+import com.ironsource.adapters.bidmachine.BidMachineConstants
+import com.ironsource.mediationsdk.adunit.adapter.listener.InterstitialAdListener
+import com.ironsource.mediationsdk.adunit.adapter.utility.AdData
+import com.ironsource.mediationsdk.adunit.adapter.utility.AdapterErrors
 import com.ironsource.mediationsdk.bidding.BiddingDataCallback
 import com.ironsource.mediationsdk.logger.IronLog
-import com.ironsource.mediationsdk.sdk.InterstitialSmashListener
-import com.ironsource.mediationsdk.utils.ErrorBuilder
-import com.ironsource.mediationsdk.utils.IronSourceConstants
+import com.ironsource.mediationsdk.model.NetworkSettings
+import com.unity3d.mediation.adapters.levelplay.LevelPlayBaseInterstitial
 import io.bidmachine.AdPlacementConfig
 import io.bidmachine.interstitial.InterstitialAd
 import io.bidmachine.interstitial.InterstitialRequest
-import org.json.JSONObject
-import java.lang.ref.WeakReference
 
+class BidMachineInterstitialAdapter(networkSettings: NetworkSettings) :
+    LevelPlayBaseInterstitial<BidMachineAdapter>(networkSettings) {
 
-class BidMachineInterstitialAdapter(adapter: BidMachineAdapter) :
-    AbstractInterstitialAdapter<BidMachineAdapter>(adapter) {
+    private var interstitialAd: InterstitialAd? = null
 
-    private var mInterstitialListener : InterstitialSmashListener? = null
-    private var mInterstitialAdListener : BidMachineInterstitialAdListener? = null
-    private var mInterstitialAd: InterstitialAd? = null
-    private var isInterstitialAdAvailable = false
-    private var mInterstitialRequest: InterstitialRequest? = null
+    // region LevelPlay Interstitial API
 
-    override fun initInterstitialForBidding(
-        appKey: String?,
-        userId: String?,
-        config: JSONObject,
-        listener: InterstitialSmashListener
+    override fun loadAd(
+        adData: AdData,
+        context: Context,
+        listener: InterstitialAdListener
+    ) {
+        val placementId = adData.getString(BidMachineConstants.PLACEMENT_ID_KEY)
+        IronLog.ADAPTER_API.verbose(BidMachineConstants.Logs.PLACEMENT_ID.format(placementId ?: ""))
+
+        interstitialAd = InterstitialAd(context.applicationContext).apply {
+            setListener(BidMachineInterstitialListener(listener))
+        }
+
+        val adPlacementConfig = createInterstitialPlacementConfig(placementId)
+        val interstitialRequest = InterstitialRequest.Builder(adPlacementConfig)
+            .setBidPayload(adData.serverData)
+            .build()
+
+        interstitialAd?.load(interstitialRequest)
+    }
+
+    override fun showAd(
+        adData: AdData,
+        activity: Activity,
+        listener: InterstitialAdListener
     ) {
         IronLog.ADAPTER_API.verbose()
-        val sourceId = config.optString(BidMachineAdapter.getSourceIdKey())
-        if (TextUtils.isEmpty(sourceId)) {
-            IronLog.INTERNAL.error(getAdUnitIdMissingErrorString(sourceId))
-            listener.onInterstitialInitFailed(
-                ErrorBuilder.buildInitFailedError(
-                    getAdUnitIdMissingErrorString(sourceId),
-                    IronSourceConstants.INTERSTITIAL_AD_UNIT
-                )
+
+        if (!isAdAvailable(adData)) {
+            IronLog.ADAPTER_API.error(BidMachineConstants.AD_NOT_READY)
+            listener.onAdShowFailed(
+                AdapterErrors.ADAPTER_ERROR_AD_EXPIRED,
+                BidMachineConstants.AD_NOT_READY
             )
             return
         }
 
-        //save interstitial listener
-        mInterstitialListener = listener
-
-        when (adapter.getInitState()) {
-            BidMachineAdapter.Companion.InitState.INIT_STATE_SUCCESS -> {
-                listener.onInterstitialInitSuccess()
-            }
-            BidMachineAdapter.Companion.InitState.INIT_STATE_NONE,
-            BidMachineAdapter.Companion.InitState.INIT_STATE_IN_PROGRESS -> {
-                adapter.initSdk(sourceId)
-            }
-        }
+        interstitialAd?.show()
     }
 
-    override fun onNetworkInitCallbackSuccess() {
-        mInterstitialListener?.onInterstitialInitSuccess()
+    override fun isAdAvailable(adData: AdData): Boolean {
+        return interstitialAd?.let { ad ->
+            ad.canShow() && !ad.isExpired
+        } ?: false
     }
 
-    override fun loadInterstitialForBidding(
-        config: JSONObject,
-        adData: JSONObject?,
-        serverData: String?,
-        listener: InterstitialSmashListener
-    ) {
+    override fun destroyAd(adData: AdData) {
         IronLog.ADAPTER_API.verbose()
-
-        setInterstitialAdAvailability(false)
-
-        val interstitial = InterstitialAd(ContextProvider.getInstance().applicationContext)
-        val interstitialAdListener = BidMachineInterstitialAdListener(WeakReference(this), listener)
-        interstitial.setListener(interstitialAdListener)
-        mInterstitialAdListener = interstitialAdListener
-
-        val adPlacementConfig = createInterstitialPlacementConfig(config)
-        val interstitialRequestBuilder = InterstitialRequest.Builder(adPlacementConfig)
-            .setBidPayload(serverData)
-
-        mInterstitialRequest = interstitialRequestBuilder.build()
-        interstitial.load(mInterstitialRequest)
+        interstitialAd?.setListener(null)
+        interstitialAd?.destroy()
+        interstitialAd = null
     }
 
-    override fun showInterstitial(config: JSONObject, listener: InterstitialSmashListener) {
-        IronLog.ADAPTER_API.verbose()
-
-        if (!isInterstitialReady(config)) {
-            listener.onInterstitialAdShowFailed(
-                ErrorBuilder.buildNoAdsToShowError(
-                    IronSourceConstants.INTERSTITIAL_AD_UNIT
-                )
-            )
-        } else {
-                mInterstitialAd?.show()
-        }
-
-        setInterstitialAdAvailability(false)
-    }
-
-    override fun isInterstitialReady(config: JSONObject): Boolean {
-        return isInterstitialAdAvailable &&
-            mInterstitialAd?.let { interstitialAd ->
-                interstitialAd.canShow() && !interstitialAd.isExpired
-            } ?: false
-
-    }
-
-    override fun collectInterstitialBiddingData(
-        config: JSONObject,
-        adData: JSONObject?,
+    override fun collectBiddingData(
+        adData: AdData?,
+        context: Context,
         biddingDataCallback: BiddingDataCallback
     ) {
-        val adPlacementConfig = createInterstitialPlacementConfig(config)
-        adapter.collectBiddingData(biddingDataCallback, adPlacementConfig)
+        val placementId = adData?.getString(BidMachineConstants.PLACEMENT_ID_KEY)
+        IronLog.ADAPTER_API.verbose(BidMachineConstants.Logs.PLACEMENT_ID.format(placementId ?: ""))
+
+        val networkAdapter = getNetworkAdapter()
+        if (networkAdapter == null) {
+            IronLog.INTERNAL.error(BidMachineConstants.Logs.NETWORK_ADAPTER_IS_NULL)
+            biddingDataCallback.onFailure(BidMachineConstants.Logs.NETWORK_ADAPTER_IS_NULL)
+            return
+        }
+
+        val adPlacementConfig = createInterstitialPlacementConfig(placementId)
+        networkAdapter.collectBiddingData(context, biddingDataCallback, adPlacementConfig)
     }
 
-    //region Helpers
+    // endregion
 
-    internal fun setInterstitialAdAvailability(isAvailable: Boolean) {
-        isInterstitialAdAvailable = isAvailable
-    }
+    // region Helper Methods
 
-    internal fun setInterstitialAd(interstitialAd: InterstitialAd) {
-        mInterstitialAd = interstitialAd
-    }
-
-    internal fun destroyInterstitialAd() {
-        mInterstitialAd?.setListener(null)
-        mInterstitialAd?.destroy()
-        mInterstitialAd = null
-    }
-
-
-    private fun createInterstitialPlacementConfig(config: JSONObject): AdPlacementConfig {
-        val placementId = config.optString(BidMachineAdapter.getPlacementIdKey())
+    private fun createInterstitialPlacementConfig(placementId: String?): AdPlacementConfig {
         val adPlacementConfigBuilder = AdPlacementConfig.interstitialBuilder()
-        if(!placementId.isNullOrEmpty()) {
+        if (!placementId.isNullOrEmpty()) {
             adPlacementConfigBuilder.withPlacementId(placementId)
         }
         return adPlacementConfigBuilder.build()
     }
 
-
-    //end region
+    // endregion
 }
